@@ -36,8 +36,11 @@ module.exports = class Block {
       this.balances.set(prevBlock.rewardAddr, winnerBalance + prevBlock.totalRewards());
     }
 
-    // Storing transactions in a Map to preserve key order.
-    this.transactions = new Map();
+    // Storing transactions in a Merkle Tree
+    this.transactions = new Map(); //Arbitrary 8 transaction limit
+
+    //Temporarily store transactions in a maxheap
+    this.feePriorityHeap = new MaxHeap();
 
     // Adding toJSON methods for transactions and balances, which help with
     // serialization.
@@ -132,6 +135,7 @@ module.exports = class Block {
    //}
   }
 
+  //Deprecated in the merkle tree addition
   toJSON() {
     let o = {
       chainLength: this.chainLength,
@@ -180,7 +184,7 @@ module.exports = class Block {
    * @returns {Boolean} - True if the transaction was added successfully.
    */
   addTransaction(tx, client) {
-    if (this.transactions.get(tx.id)) {
+    if (this.feePriorityHeap.includes(tx)) {
       if (client) client.log(`Duplicate transaction ${tx.id}.`);
       return false;
     } else if (tx.sig === undefined) {
@@ -209,22 +213,25 @@ module.exports = class Block {
     }
 
     // Adding the transaction to the block
-    this.transactions.set(tx.id, tx);
+    this.feePriorityHeap.insert(tx);
+
+    //TODO update merkletree
 
     // Taking gold from the sender
-    let senderBalance = this.balanceOf(tx.from);
-    this.balances.set(tx.from, senderBalance - tx.totalOutput());
+    // let senderBalance = this.balanceOf(tx.from);
+    // this.balances.set(tx.from, senderBalance - tx.totalOutput());
 
-    // Giving gold to the specified output addresses
-    tx.outputs.forEach(({amount, address}) => {
-      let oldBalance = this.balanceOf(address);
-      this.balances.set(address, amount + oldBalance);
-    });
+    // // Giving gold to the specified output addresses
+    // tx.outputs.forEach(({amount, address}) => {
+    //   let oldBalance = this.balanceOf(address);
+    //   this.balances.set(address, amount + oldBalance);
+    // });
 
     return true;
   }
 
   /**
+   * DEPRECATED
    * When a block is received from another party, it does not include balances or a record of
    * the latest nonces for each client.  This method restores this information be wiping out
    * and re-adding all transactions.  This process also identifies if any transactions were
