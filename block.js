@@ -9,7 +9,8 @@ const utils = require('./utils.js');
  * to a previous block.
  */
 module.exports = class Block {
-
+  //Temporarily store transactions in a maxheap
+  static feePriorityHeap = new MaxHeap();
   /**
    * Creates a new Block.  Note that the previous block will not be stored;
    * instead, its hash value will be maintained in this block.
@@ -38,9 +39,6 @@ module.exports = class Block {
 
     // Storing transactions in a Merkle Tree
     this.transactions = new Map(); //Arbitrary 8 transaction limit
-
-    //Temporarily store transactions in a maxheap
-    this.feePriorityHeap = new MaxHeap();
 
     // Adding toJSON methods for transactions and balances, which help with
     // serialization.
@@ -184,7 +182,7 @@ module.exports = class Block {
    * @returns {Boolean} - True if the transaction was added successfully.
    */
   addTransaction(tx, client) {
-    if (this.feePriorityHeap.includes(tx)) {
+    if (Block.feePriorityHeap.includes(tx)) {
       if (client) client.log(`Duplicate transaction ${tx.id}.`);
       return false;
     } else if (tx.sig === undefined) {
@@ -213,9 +211,9 @@ module.exports = class Block {
     }
 
     // Adding the transaction to the block
-    this.feePriorityHeap.insert(tx);
+    Block.feePriorityHeap.insert(tx);
 
-    //TODO update merkletree
+    //TODO update merkletree and pay out transactions that are added to it
 
     // Taking gold from the sender
     // let senderBalance = this.balanceOf(tx.from);
