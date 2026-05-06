@@ -2,6 +2,7 @@
 
 let Blockchain = require('./blockchain.js');
 let Client = require('./client.js');
+let MaxHeap = require('./max-heap.js');
 
 /**
  * Miners are clients, but they also mine blocks looking for "proofs".
@@ -28,8 +29,20 @@ module.exports = class Miner extends Client {
     super({name, password, net, startingBlock, keyPair});
     this.miningRounds=miningRounds;
 
-    // Set of transactions to be added to the next block.
-    this.transactions = new Set();
+    // Fee-prioritized mempool (max-heap).
+    // Tie-breaker: tx id lexicographically for determinism.
+    this.mempool = new MaxHeap({
+      compareFn: (a, b) => {
+        const af = Number(a.fee) || 0;
+        const bf = Number(b.fee) || 0;
+        if (af !== bf) return af - bf;
+        const aid = String(a.id);
+        const bid = String(b.id);
+        if (aid === bid) return 0;
+        return aid > bid ? 1 : -1;
+      },
+    });
+    this.mempoolIds = new Set();
   }
 
   /**
@@ -52,16 +65,24 @@ module.exports = class Miner extends Client {
   startNewSearch(txSet=new Set()) {
     this.currentBlock = Blockchain.makeBlock(this.address, this.lastBlock);
 
-    // Merging txSet into the transaction queue.
-    // These transactions may include transactions not already included
-    // by a recently received block, but that the miner is aware of.
-    txSet.forEach((tx) => this.transactions.add(tx));
+    // Re-queue txs we still know about.
+    txSet.forEach((tx) => this._maybeAddToMempool(tx));
 
-    // Add queued-up transactions to block.
-    this.transactions.forEach((tx) => {
-      this.currentBlock.addTransaction(tx, this);
-    });
-    this.transactions.clear();
+    // Select top transactions by fee (max 8) into the new block.
+    let added = 0;
+    const leftovers = [];
+    while (added < 8 && this.mempool.size() > 0) {
+      const tx = this.mempool.removeMax();
+      this.mempoolIds.delete(tx.id);
+      const ok = this.currentBlock.addTransaction(tx, this);
+      if (ok) {
+        added++;
+      } else {
+        // Invalid for this block; keep around for later if it might become valid.
+        leftovers.push(tx);
+      }
+    }
+    leftovers.forEach((tx) => this._maybeAddToMempool(tx));
 
     // Start looking for a proof at 0.
     this.currentBlock.proof = 0;
@@ -171,7 +192,7 @@ module.exports = class Miner extends Client {
    */
   addTransaction(tx) {
     tx = Blockchain.makeTransaction(tx);
-    this.transactions.add(tx);
+    this._maybeAddToMempool(tx);
   }
 
   /**
@@ -182,6 +203,27 @@ module.exports = class Miner extends Client {
   postTransaction(...args) {
     let tx = super.postTransaction(...args);
     return this.addTransaction(tx);
+  }
+
+  _maybeAddToMempool(tx) {
+    if (!tx || !tx.id) return false;
+    if (this.mempoolIds.has(tx.id)) return false;
+    if (!this._validForMempool(tx)) return false;
+    const inserted = this.mempool.insert(tx, tx.id);
+    if (inserted) this.mempoolIds.add(tx.id);
+    return inserted;
+  }
+
+  _validForMempool(tx) {
+    // Basic checks required by spec.
+    if (tx.sig === undefined) return false;
+    if (!tx.validSignature()) return false;
+    if (this.lastBlock && !tx.sufficientFunds(this.lastBlock)) return false;
+    if (this.lastBlock) {
+      const expected = this.lastBlock.nextNonce.get(tx.from) || 0;
+      if (tx.nonce !== expected) return false;
+    }
+    return true;
   }
 
 };

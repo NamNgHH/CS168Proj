@@ -3,6 +3,7 @@
 const Blockchain = require('./blockchain.js');
 
 const utils = require('./utils.js');
+const merkle = require('./merkle.js');
 
 /**
  * A block is a collection of transactions, with a hash connecting it
@@ -39,6 +40,11 @@ module.exports = class Block {
     // Storing transactions in a Map to preserve key order.
     this.transactions = new Map();
 
+    // Merkle root for block txs (double-sha256) + mutation flag.
+    // Set whenever tx list changes; verified on receipt.
+    this.merkleRoot = undefined;
+    this.merkleMutated = false;
+
     // Adding toJSON methods for transactions and balances, which help with
     // serialization.
     // this.transactions.toJSON = () => {
@@ -62,6 +68,40 @@ module.exports = class Block {
     this.rewardAddr = rewardAddr;
 
     this.coinbaseReward = coinbaseReward;
+  }
+
+  _recomputeMerkle() {
+    const leafHashes = [...this.transactions.keys()].map(merkle.leafHashFromTxId);
+    const { root, mutated } = merkle.buildRoot(leafHashes);
+    this.merkleRoot = root;
+    this.merkleMutated = mutated;
+    return { root, mutated };
+  }
+
+  getMerkleRoot() {
+    if (this.merkleRoot === undefined) this._recomputeMerkle();
+    return this.merkleRoot;
+  }
+
+  /**
+   * Returns a membership proof for the given tx (or tx id) in this block.
+   * O(log N) proof size and verification.
+   */
+  getMerkleProof(txOrId) {
+    const txId = (txOrId && txOrId.id) ? txOrId.id : String(txOrId);
+    const ids = [...this.transactions.keys()];
+    const index = ids.indexOf(txId);
+    if (index < 0) return null;
+
+    const leafHashes = ids.map(merkle.leafHashFromTxId);
+    const { tree, base, root } = merkle.buildFixedTree(leafHashes);
+    const proof = merkle.getProof({ tree, base, index, leafCount: leafHashes.length });
+    proof.root = root;
+    return proof;
+  }
+
+  static verifyMerkleProof(proof) {
+    return merkle.verifyProof({ proof });
   }
 
   /**
@@ -147,6 +187,8 @@ module.exports = class Block {
       o.prevBlockHash = this.prevBlockHash;
       o.proof = this.proof;
       o.rewardAddr = this.rewardAddr;
+      o.merkleRoot = this.getMerkleRoot();
+      o.merkleMutated = !!this.merkleMutated;
     }
     return o;
   }
@@ -210,6 +252,8 @@ module.exports = class Block {
 
     // Adding the transaction to the block
     this.transactions.set(tx.id, tx);
+    // Merkle root changes as tx set changes.
+    this._recomputeMerkle();
 
     // Taking gold from the sender
     let senderBalance = this.balanceOf(tx.from);
@@ -251,6 +295,15 @@ module.exports = class Block {
       let success = this.addTransaction(tx);
       if (!success) return false;
     }
+
+    // Verify claimed merkle root and mutation rule, if present.
+    // If missing (older blocks), compute and set it.
+    const claimedRoot = this.merkleRoot;
+    const claimedMutated = !!this.merkleMutated;
+    const { root, mutated } = this._recomputeMerkle();
+    if (claimedRoot !== undefined && claimedRoot !== root) return false;
+    if (claimedRoot !== undefined && claimedMutated !== mutated) return false;
+    if (mutated) return false;
 
     return true;
   }

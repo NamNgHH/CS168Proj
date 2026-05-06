@@ -9,6 +9,7 @@ const Blockchain = require('./blockchain.js');
 const Client = require('./client.js');
 const Miner = require('./miner.js');
 const Transaction = require('./transaction.js');
+const merkle = require('./merkle.js');
 
 // Generating keypair for multiple test cases, since key generation is slow.
 const kp = utils.generateKeypair();
@@ -136,6 +137,30 @@ describe('Block', () => {
       assert.equal(b2.balances.get("ffff"), 100+20);
       assert.equal(b2.balances.get("face"), 99+40);
     });
+  });
+
+  describe('#getMerkleProof', () => {
+    it("should create and verify an O(log N) merkle proof for a tx", () => {
+      let b = new Block(addr, prevBlock);
+      let tx = new Transaction(t);
+      tx.sign(kp.private);
+      b.addTransaction(tx);
+
+      const proof = b.getMerkleProof(tx);
+      assert.isNotNull(proof);
+      assert.isTrue(Block.verifyMerkleProof(proof));
+      assert.equal(proof.root, b.getMerkleRoot());
+    });
+  });
+});
+
+describe('Merkle mutation rule', () => {
+  it("should mark mutated when odd-level duplicates create identical tail pair", () => {
+    // Two identical leaf hashes at the end triggers mutation detection.
+    const a = merkle.leafHashFromTxId("a");
+    const b = merkle.leafHashFromTxId("b");
+    const { mutated } = merkle.buildRoot([a, b, b]);
+    assert.isTrue(mutated);
   });
 });
 

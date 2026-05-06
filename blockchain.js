@@ -108,6 +108,8 @@ module.exports = class Blockchain {
       b.prevBlockHash = o.prevBlockHash;
       b.proof = o.proof;
       b.rewardAddr = o.rewardAddr;
+      b.merkleRoot = o.merkleRoot;
+      b.merkleMutated = o.merkleMutated;
       // Likewise, transactions need to be recreated and restored in a map.
       b.transactions = new Map();
       if (o.transactions) o.transactions.forEach(([txID,txJson]) => {
