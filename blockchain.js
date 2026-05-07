@@ -116,18 +116,21 @@ module.exports = class Blockchain {
       b.rewardAddr = o.rewardAddr;
       b.merkleRoot = o.merkleRoot;
       b.merkleMutated = o.merkleMutated;
-      // Likewise, transactions need to be recreated and restored in a map.
-      b.transactions = new Map();
-      // Map loses duplicate keys; detect repeats in the wire array so rerun can reject.
+      // Restore ordered transaction list from wire format.
+      b.transactions = [];
+      // Detect repeated transaction ids in the wire array so rerun can reject.
       if (o.transactions) {
         const seenWireIds = new Set();
-        o.transactions.forEach(([txID, txJson]) => {
+        o.transactions.forEach((wireTx) => {
+          // Backward compatibility: accept either [txID, txJson] or txJson.
+          const txJson = Array.isArray(wireTx) ? wireTx[1] : wireTx;
+          const txID = Array.isArray(wireTx) ? wireTx[0] : txJson.id;
           if (seenWireIds.has(txID)) {
             b.invalidDuplicateWireTxIds = true;
           }
           seenWireIds.add(txID);
           let tx = this.makeTransaction(txJson);
-          b.transactions.set(txID, tx);
+          b.transactions.push(tx);
         });
       }
     }

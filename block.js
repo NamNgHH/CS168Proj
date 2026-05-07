@@ -38,8 +38,8 @@ module.exports = class Block {
       this.balances.set(prevBlock.rewardAddr, winnerBalance + prevBlock.totalRewards());
     }
 
-    // Storing transactions in a Map to preserve key order.
-    this.transactions = new Map();
+    // Ordered transaction list for this block.
+    this.transactions = [];
 
     // Merkle root for block txs (double-sha256) + mutation flag.
     // Set whenever tx list changes; verified on receipt.
@@ -74,9 +74,9 @@ module.exports = class Block {
     this.coinbaseReward = coinbaseReward;
   }
 
-  /** Leaf order = Map insertion order (same order miners/clients must use when verifying). */
+  /** Leaf order = transaction array order (same order miners/clients must use when verifying). */
   _recomputeMerkle() {
-    const leafHashes = [...this.transactions.keys()].map(merkle.leafHashFromTxId);
+    const leafHashes = this.transactions.map((tx) => merkle.leafHashFromTxId(tx.id));
     const { root, mutated } = merkle.buildRoot(leafHashes);
     this.merkleRoot = root;
     this.merkleMutated = mutated;
@@ -94,7 +94,7 @@ module.exports = class Block {
    */
   getMerkleProof(txOrId) {
     const txId = (txOrId && txOrId.id) ? txOrId.id : String(txOrId);
-    const ids = [...this.transactions.keys()];
+    const ids = this.transactions.map((tx) => tx.id);
     const index = ids.indexOf(txId);
     if (index < 0) return null;
 
@@ -208,7 +208,7 @@ module.exports = class Block {
       o.balances = Array.from(this.balances.entries());
     } else {
       // Other blocks must specify transactions and proof details.
-      o.transactions = Array.from(this.transactions.entries());
+      o.transactions = this.transactions;
       o.header = this.getHeader();
       o.prevBlockHash = this.prevBlockHash;
       o.proof = this.proof;
@@ -251,12 +251,12 @@ module.exports = class Block {
   addTransaction(tx, client) {
     // Finite block space (matches miner heap pull cap).
     const maxTx = Blockchain.MAX_BLOCK_TRANSACTIONS;
-    if (this.transactions.size >= maxTx) {
+    if (this.transactions.length >= maxTx) {
       if (client) client.log(`Block full (${maxTx} transactions max).`);
       return false;
     }
 
-    if (this.transactions.get(tx.id)) {
+    if (this.transactions.some((t) => t.id === tx.id)) {
       if (client) client.log(`Duplicate transaction ${tx.id}.`);
       return false;
     } else if (tx.sig === undefined) {
@@ -285,7 +285,7 @@ module.exports = class Block {
     }
 
     // Adding the transaction to the block
-    this.transactions.set(tx.id, tx);
+    this.transactions.push(tx);
     // Merkle root changes as tx set changes.
     this._recomputeMerkle();
 
@@ -329,8 +329,8 @@ module.exports = class Block {
 
     // Re-adding all transactions.
     let txs = this.transactions;
-    this.transactions = new Map();
-    for (let tx of txs.values()) {
+    this.transactions = [];
+    for (let tx of txs) {
       let success = this.addTransaction(tx);
       if (!success) return false;
     }
@@ -369,8 +369,8 @@ module.exports = class Block {
    *
    */
   totalRewards() {
-    return [...this.transactions].reduce(
-      (reward, [, tx]) => reward + tx.fee,
+    return this.transactions.reduce(
+      (reward, tx) => reward + tx.fee,
       this.coinbaseReward);
   }
 
@@ -384,6 +384,6 @@ module.exports = class Block {
    * @returns {boolean} - True if the transaction is contained in this block.
    */
   contains(tx) {
-    return this.transactions.has(tx.id);
+    return this.transactions.some((t) => t.id === tx.id);
   }
 };
