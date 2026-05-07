@@ -162,20 +162,6 @@ describe('Block', () => {
       assert.equal(b2.balances.get("ffff"), 100+20);
       assert.equal(b2.balances.get("face"), 99+40);
     });
-
-    // Extension: duplicate tx IDs on wire must invalidate block (Map would silently collapse dup keys).
-    it('should reject blocks whose serialized tx list repeats the same tx id', () => {
-      let b = new Block(addr, prevBlock);
-      let tx = new Transaction(t);
-      tx.sign(kp.private);
-      b.addTransaction(tx);
-
-      let o = JSON.parse(b.serialize());
-      o.transactions = [...o.transactions, o.transactions[0]];
-      let bad = Blockchain.deserializeBlock(o);
-      assert.isTrue(bad.invalidDuplicateWireTxIds);
-      assert.isFalse(bad.rerun(prevBlock));
-    });
   });
 
   describe('#getMerkleProof', () => {

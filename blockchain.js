@@ -22,7 +22,7 @@ const DEFAULT_TX_FEE = 1;
 // Note that the genesis block is always considered to be confirmed.
 const CONFIRMED_DEPTH = 6;
 
-/** Must stay in sync with miner mempool pull loop (fee-priority top-N into next block). */
+//Number of maximum transactions the proposed blocks can hold
 const MAX_BLOCK_TRANSACTIONS = 8;
 
 
@@ -116,23 +116,12 @@ module.exports = class Blockchain {
       b.rewardAddr = o.rewardAddr;
       b.merkleRoot = o.merkleRoot;
       b.merkleMutated = o.merkleMutated;
-      // Restore ordered transaction list from wire format.
+      // Likewise, transactions need to be recreated and restored in a map.
       b.transactions = [];
-      // Detect repeated transaction ids in the wire array so rerun can reject.
-      if (o.transactions) {
-        const seenWireIds = new Set();
-        o.transactions.forEach((wireTx) => {
-          // Backward compatibility: accept either [txID, txJson] or txJson.
-          const txJson = Array.isArray(wireTx) ? wireTx[1] : wireTx;
-          const txID = Array.isArray(wireTx) ? wireTx[0] : txJson.id;
-          if (seenWireIds.has(txID)) {
-            b.invalidDuplicateWireTxIds = true;
-          }
-          seenWireIds.add(txID);
-          let tx = this.makeTransaction(txJson);
-          b.transactions.push(tx);
-        });
-      }
+      if (o.transactions) o.transactions.forEach((txJson) => {
+        let tx = this.makeTransaction(txJson);
+        b.transactions.push(tx);
+      });
     }
 
     return b;

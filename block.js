@@ -1,9 +1,7 @@
 "use strict";
 
 const Blockchain = require('./blockchain.js');
-
 const utils = require('./utils.js');
-// Bitcoin-style Merkle over tx ids (double SHA-256, odd-level duplication, mutation detection).
 const merkle = require('./merkle.js');
 
 /**
@@ -45,9 +43,6 @@ module.exports = class Block {
     // Set whenever tx list changes; verified on receipt.
     this.merkleRoot = undefined;
     this.merkleMutated = false;
-
-    // Set by Blockchain.deserializeBlock when wire-format tx list repeats an id.
-    this.invalidDuplicateWireTxIds = false;
 
     // Adding toJSON methods for transactions and balances, which help with
     // serialization.
@@ -192,7 +187,6 @@ module.exports = class Block {
       o.prevBlockHash = this.prevBlockHash;
       o.proof = this.proof;
       o.rewardAddr = this.rewardAddr;
-      // Peers recompute from transactions + compare (do not trust proposer blindly).
       o.merkleRoot = this.getMerkleRoot();
       o.merkleMutated = !!this.merkleMutated;
     }
@@ -228,17 +222,19 @@ module.exports = class Block {
    * @returns {Boolean} - True if the transaction was added successfully.
    */
   addTransaction(tx, client) {
-    // Finite block space (matches miner heap pull cap).
+    // Finite block space
     const maxTx = Blockchain.MAX_BLOCK_TRANSACTIONS;
     if (this.transactions.length >= maxTx) {
       if (client) client.log(`Block full (${maxTx} transactions max).`);
       return false;
     }
 
-    if (this.transactions.some((t) => t.id === tx.id)) {
-      if (client) client.log(`Duplicate transaction ${tx.id}.`);
-      return false;
-    } else if (tx.sig === undefined) {
+    //We may allow duplicate transactions for demo purposes ie. showing the Bitcoin mutation vulnerability (CVE-2012-2459)
+    // if (this.transactions.some((t) => t.id === tx.id)) {
+    //   if (client) client.log(`Duplicate transaction ${tx.id}.`);
+    //   return false;
+    // } else 
+    if (tx.sig === undefined) {
       if (client) client.log(`Unsigned transaction ${tx.id}.`);
       return false;
     } else if (!tx.validSignature()) {
@@ -293,10 +289,6 @@ module.exports = class Block {
    * @returns {Boolean} - True if the block's transactions are all valid.
    */
   rerun(prevBlock) {
-    // Same tx id twice in serialized JSON is ambiguous with Merkle padding (see proposal / CHANGELOG).
-    if (this.invalidDuplicateWireTxIds) {
-      return false;
-    }
 
     // Setting balances to the previous block's balances.
     this.balances = new Map(prevBlock.balances);

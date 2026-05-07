@@ -1,8 +1,6 @@
 "use strict";
-
 let Blockchain = require('./blockchain.js');
 let Client = require('./client.js');
-// Fee-priority mempool: O(log n) insert/remove; block txs still live only on Block.
 let MaxHeap = require('./max-heap.js');
 
 /**
@@ -30,8 +28,8 @@ module.exports = class Miner extends Client {
     super({name, password, net, startingBlock, keyPair});
     this.miningRounds=miningRounds;
 
-    // Replaces the old Set mempool: highest fee first when filling the next block.
-    // Equal fees → lexicographic tx.id so peers agree on block content ordering.
+    // Possible transactions to add ordered so greatest fees are first
+    // If equal fees, lexicographic tx.id
     this.mempool = new MaxHeap({
       compareFn: (a, b) => {
         const af = Number(a.fee) || 0;
@@ -66,23 +64,17 @@ module.exports = class Miner extends Client {
   startNewSearch(txSet=new Set()) {
     this.currentBlock = Blockchain.makeBlock(this.address, this.lastBlock);
 
-    txSet.forEach((tx) => this._maybeAddToMempool(tx));
+    txSet.forEach((tx) => this.mempool.insert(tx));
 
-    // Greedy: pop best fee until block full or mempool empty (invalid txs go back to mempool).
+    //pop best fee until block full or mempool empty
     let added = 0;
-    const leftovers = [];
     while (added < Blockchain.MAX_BLOCK_TRANSACTIONS && this.mempool.size() > 0) {
       const tx = this.mempool.removeMax();
-      this.mempoolIds.delete(tx.id);
-      const ok = this.currentBlock.addTransaction(tx, this);
-      if (ok) {
+      const accepted = this.currentBlock.addTransaction(tx, this);
+      if (accepted) {
         added++;
-      } else {
-        // Invalid for this block; keep around for later if it might become valid.
-        leftovers.push(tx);
       }
     }
-    leftovers.forEach((tx) => this._maybeAddToMempool(tx));
 
     // Start looking for a proof at 0.
     this.currentBlock.proof = 0;
@@ -192,7 +184,7 @@ module.exports = class Miner extends Client {
    */
   addTransaction(tx) {
     tx = Blockchain.makeTransaction(tx);
-    this._maybeAddToMempool(tx);
+    this.mempool.insert(tx);
   }
 
   /**
@@ -203,28 +195,6 @@ module.exports = class Miner extends Client {
   postTransaction(...args) {
     let tx = super.postTransaction(...args);
     return this.addTransaction(tx);
-  }
-
-  /** Heap dedupe by tx.id; cheap admission checks vs chain head only. */
-  _maybeAddToMempool(tx) {
-    if (!tx || !tx.id) return false;
-    if (this.mempoolIds.has(tx.id)) return false;
-    if (!this._validForMempool(tx)) return false;
-    const inserted = this.mempool.insert(tx, tx.id);
-    if (inserted) this.mempoolIds.add(tx.id);
-    return inserted;
-  }
-
-  _validForMempool(tx) {
-    // Basic checks required by spec.
-    if (tx.sig === undefined) return false;
-    if (!tx.validSignature()) return false;
-    if (this.lastBlock && !tx.sufficientFunds(this.lastBlock)) return false;
-    if (this.lastBlock) {
-      const expected = this.lastBlock.nextNonce.get(tx.from) || 0;
-      if (tx.nonce !== expected) return false;
-    }
-    return true;
   }
 
 };
