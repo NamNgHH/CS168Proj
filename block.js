@@ -119,33 +119,13 @@ module.exports = class Block {
   }
 
   /**
-   * Bitcoin-style header fields: consensus-critical summary of the block body.
-   * Peers can hash this for PoW checks and compare merkle commitments.
-   */
-  getHeader() {
-    let h = {
-      chainLength: this.chainLength,
-      timestamp: this.timestamp,
-    };
-    if (!this.isGenesisBlock()) {
-      h.prevBlockHash = this.prevBlockHash;
-      h.proof = this.proof;
-      h.rewardAddr = this.rewardAddr;
-      h.merkleRoot = this.getMerkleRoot();
-      h.merkleMutated = !!this.merkleMutated;
-    }
-    return h;
-  }
-
-  /**
    * Returns true if the hash of the block is less than the target
    * proof of work value.
    *
    * @returns {Boolean} - True if the block has a valid proof.
    */
   hasValidProof() {
-    // PoW commits to the block header, not the raw transaction list.
-    let h = utils.hash(JSON.stringify(this.getHeader()));
+    let h = utils.hash(this.serialize());
     let n = BigInt(`0x${h}`);
     return n < this.target;
   }
@@ -209,7 +189,6 @@ module.exports = class Block {
     } else {
       // Other blocks must specify transactions and proof details.
       o.transactions = this.transactions;
-      o.header = this.getHeader();
       o.prevBlockHash = this.prevBlockHash;
       o.proof = this.proof;
       o.rewardAddr = this.rewardAddr;

@@ -4,7 +4,7 @@ let Blockchain = require('./blockchain.js');
 let Block = require('./block.js');
 let FakeNet = require('./fake-net.js');
 
-console.log("Starting header + fee-priority + merkle demo...");
+console.log("Starting fee-priority + merkle demo...");
 
 // Single miner keeps the ordering deterministic for demo output.
 let bc = Blockchain.createInstance({
@@ -37,10 +37,18 @@ bc.start(5000, () => {
     return;
   }
 
-  console.log("\n--- Latest mined block header ---");
-  console.log(head.getHeader());
+  console.log("\n--- Latest mined block summary ---");
+  console.log({
+    chainLength: head.chainLength,
+    timestamp: head.timestamp,
+    prevBlockHash: head.prevBlockHash,
+    proof: head.proof,
+    rewardAddr: head.rewardAddr,
+    merkleRoot: head.getMerkleRoot(),
+    merkleMutated: !!head.merkleMutated,
+  });
 
-  let txs = [...head.transactions.values()];
+  let txs = head.transactions;
   console.log("\nTransactions in latest block (fee descending expected):");
   txs.forEach((tx, i) => console.log(`  #${i+1} tx=${tx.id.slice(0, 16)}... fee=${tx.fee}`));
 

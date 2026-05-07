@@ -192,23 +192,6 @@ describe('Block', () => {
     });
   });
 
-  describe('#getHeader', () => {
-    it("should expose merkle commitment fields in block header", () => {
-      let b = new Block(addr, prevBlock);
-      let tx = new Transaction(t);
-      tx.sign(kp.private);
-      b.addTransaction(tx);
-      b.proof = 1234;
-
-      let header = b.getHeader();
-      assert.equal(header.prevBlockHash, b.prevBlockHash);
-      assert.equal(header.proof, 1234);
-      assert.equal(header.rewardAddr, b.rewardAddr);
-      assert.equal(header.merkleRoot, b.getMerkleRoot());
-      assert.equal(header.merkleMutated, false);
-      assert.notProperty(header, "transactions");
-    });
-  });
 });
 
 describe('Merkle mutation rule', () => {
