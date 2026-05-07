@@ -5,6 +5,7 @@ let EventEmitter = require('events');
 let Blockchain = require('./blockchain.js');
 
 let utils = require('./utils.js');
+const { MerkleTree } = require("./merkle-tree.js");
 
 /**
  * A client has a public/private keypair and an address.
@@ -223,6 +224,13 @@ module.exports = class Client extends EventEmitter {
     }
 
     if (!block.isGenesisBlock()) {
+      //make sure the block has the real merkle proof that reflects the transactions
+      const txIds = [...this.currentBlock.transactions.values()].map(tx => tx.id);
+      const merkleTree = new MerkleTree(txIds);
+      if (block.merkleRoot !== merkleTree.root) {
+        this.log(`Invalid Merkle root for block ${block.id}.`);
+        return null;
+      }
       // Verify the block, and store it if everything looks good.
       // This code will trigger an exception if there are any invalid transactions.
       let success = block.rerun(prevBlock);

@@ -2,6 +2,8 @@
 
 let Blockchain = require('./blockchain.js');
 let Client = require('./client.js');
+const MaxHeap = require('./max-heap.js');
+const { MerkleTree } = require("./merkle-tree.js");
 
 /**
  * Miners are clients, but they also mine blocks looking for "proofs".
@@ -29,7 +31,7 @@ module.exports = class Miner extends Client {
     this.miningRounds=miningRounds;
 
     // Set of transactions to be added to the next block.
-    this.transactions = new Set();
+    this.transactions = new MaxHeap();
   }
 
   /**
@@ -55,13 +57,27 @@ module.exports = class Miner extends Client {
     // Merging txSet into the transaction queue.
     // These transactions may include transactions not already included
     // by a recently received block, but that the miner is aware of.
-    txSet.forEach((tx) => this.transactions.add(tx));
+    txSet.forEach((tx) => this.transactions.push(tx));
 
-    // Add queued-up transactions to block.
-    this.transactions.forEach((tx) => {
-      this.currentBlock.addTransaction(tx, this);
-    });
-    this.transactions.clear();
+    // Add 8 queued-up transactions to block prioritized by fee.
+    const leftoverTxs = []; //Tx that don't fit in this block
+    while (!this.transactions.isEmpty()) {
+      const tx = this.transactions.pop();
+      if (this.currentBlock.transactions.size >= Blockchain.MAX_BLOCK_TRANSACTIONS) {
+        this.log(`${this.currentBlock.id} is full of 8 transactions. Next tx: ${tx.id} with fee: ${tx.fee}.`);
+        leftoverTxs.push(tx);
+        continue;
+      }
+      this.log(`${this.currentBlock.id} is adding a tx ${tx.id} with fee ${tx.fee}.`);
+      this.currentBlock.addTransaction(tx, this); //adds transaction to block if it is valid. Doesn't add it to leftovers if not
+    }
+    // Put leftovers back into heap for the next block
+    leftoverTxs.forEach(tx => this.transactions.push(tx));
+
+    // Build Merkle tree from fee-prioritized transactions
+    const txIds = [...this.currentBlock.transactions.values()].map(tx => tx.id);
+    const merkleTree = new MerkleTree(txIds);
+    this.currentBlock.merkleRoot = merkleTree.root;
 
     // Start looking for a proof at 0.
     this.currentBlock.proof = 0;
@@ -171,7 +187,7 @@ module.exports = class Miner extends Client {
    */
   addTransaction(tx) {
     tx = Blockchain.makeTransaction(tx);
-    this.transactions.add(tx);
+    this.transactions.push(tx);
   }
 
   /**

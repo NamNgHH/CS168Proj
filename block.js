@@ -39,6 +39,8 @@ module.exports = class Block {
     // Storing transactions in a Map to preserve key order.
     this.transactions = new Map();
 
+    this.merkleRoot = undefined;
+
     // Adding toJSON methods for transactions and balances, which help with
     // serialization.
     // this.transactions.toJSON = () => {
@@ -147,6 +149,7 @@ module.exports = class Block {
       o.prevBlockHash = this.prevBlockHash;
       o.proof = this.proof;
       o.rewardAddr = this.rewardAddr;
+      o.merkleRoot = this.merkleRoot;
     }
     return o;
   }
