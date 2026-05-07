@@ -35,6 +35,8 @@ bc.start(8000, () => {
   alice.showAllBalances();
 });
 
+//The transactions should be reordered while mining so that the blocks with the highest fees get added first
+
 console.log(`Alice is transferring 10 gold to ${bob.address}`);
 alice.postTransaction([{ amount: 10, address: bob.address }], 1);
 
@@ -51,10 +53,16 @@ console.log(`Alice is transferring 10 gold to ${bob.address}`);
 alice.postTransaction([{ amount: 10, address: bob.address }], 5);
 
 console.log(`Alice is transferring 10 gold to ${bob.address}`);
+alice.postTransaction([{ amount: 10, address: bob.address }], 5);
+
+console.log(`Alice is transferring 10 gold to ${bob.address}`);
+alice.postTransaction([{ amount: 10, address: bob.address }], 10);
+
+console.log(`Alice is transferring 10 gold to ${bob.address}`);
 alice.postTransaction([{ amount: 10, address: bob.address }], 6);
 
 console.log(`Alice is transferring 10 gold to ${bob.address}`);
-alice.postTransaction([{ amount: 10, address: bob.address }], 7);
+alice.postTransaction([{ amount: 10, address: bob.address }], 20);
 
 console.log(`Alice is transferring 10 gold to ${bob.address}`);
-alice.postTransaction([{ amount: 10, address: bob.address }], 8);
+alice.postTransaction([{ amount: 10, address: bob.address }], 2);
