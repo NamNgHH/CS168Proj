@@ -64,7 +64,7 @@ module.exports = class Miner extends Client {
   startNewSearch(txSet=new Set()) {
     this.currentBlock = Blockchain.makeBlock(this.address, this.lastBlock);
 
-    txSet.forEach((tx) => this.mempool.insert(tx));
+    txSet.forEach((tx) => this.mempool.insert(tx, tx.id));
 
     //pop best fee until block full or mempool empty
     let added = 0;
@@ -184,7 +184,7 @@ module.exports = class Miner extends Client {
    */
   addTransaction(tx) {
     tx = Blockchain.makeTransaction(tx);
-    this.mempool.insert(tx);
+    this.mempool.insert(tx, tx.id);
   }
 
   /**

@@ -1,10 +1,5 @@
 "use strict";
 
-/**
- * Merkle commitments for SpartanGold blocks (see CHANGELOG.md).
- * Internal pairing uses double-SHA256 on concatenated 32-byte child hashes (hex in/out).
- */
-
 const crypto = require("crypto");
 
 function sha256(buf) {
@@ -36,17 +31,12 @@ function nextPow2(n) {
 }
 
 /**
- * Build a Bitcoin-style merkle root (duplicate last when odd) with the
- * "mutation" detection rule (invalidate if the last pair on an odd level
- * is two identical hashes).
+ * Builds merkle root (duplicate last when odd) and detects if there is a mutation (the last 2 hashes when duplicated are the same)
  *
  * Returns:
  * - root: hex string (double-sha256 internal node hashing)
  * - mutated: boolean
  * - leafHashes: hex array (double-sha256(txId) by convention below)
- *
- * Notes:
- * - This is NOT byte-order flipped like Bitcoin display conventions; it's raw hex.
  */
 exports.buildRoot = function buildRoot(leafHashes) {
   if (!Array.isArray(leafHashes)) throw new Error("leafHashes must be an array");
@@ -62,7 +52,7 @@ exports.buildRoot = function buildRoot(leafHashes) {
     const next = [];
     const isOdd = (level.length % 2) === 1;
     if (isOdd) {
-      // Bitcoin Core-style mutation signal: odd count + duplicate tail before balancing dup.
+      //if odd count, duplicate tail before balancing dup.
       if (level.length >= 2 && level[level.length - 1] === level[level.length - 2]) {
         mutated = true;
       }
