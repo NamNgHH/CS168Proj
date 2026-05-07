@@ -3,6 +3,7 @@
 const Blockchain = require('./blockchain.js');
 
 const utils = require('./utils.js');
+// Bitcoin-style Merkle over tx ids (double SHA-256, odd-level duplication, mutation detection).
 const merkle = require('./merkle.js');
 
 /**
@@ -45,6 +46,9 @@ module.exports = class Block {
     this.merkleRoot = undefined;
     this.merkleMutated = false;
 
+    // Set by Blockchain.deserializeBlock when wire-format tx list repeats an id.
+    this.invalidDuplicateWireTxIds = false;
+
     // Adding toJSON methods for transactions and balances, which help with
     // serialization.
     // this.transactions.toJSON = () => {
@@ -70,6 +74,7 @@ module.exports = class Block {
     this.coinbaseReward = coinbaseReward;
   }
 
+  /** Leaf order = Map insertion order (same order miners/clients must use when verifying). */
   _recomputeMerkle() {
     const leafHashes = [...this.transactions.keys()].map(merkle.leafHashFromTxId);
     const { root, mutated } = merkle.buildRoot(leafHashes);
@@ -114,13 +119,33 @@ module.exports = class Block {
   }
 
   /**
+   * Bitcoin-style header fields: consensus-critical summary of the block body.
+   * Peers can hash this for PoW checks and compare merkle commitments.
+   */
+  getHeader() {
+    let h = {
+      chainLength: this.chainLength,
+      timestamp: this.timestamp,
+    };
+    if (!this.isGenesisBlock()) {
+      h.prevBlockHash = this.prevBlockHash;
+      h.proof = this.proof;
+      h.rewardAddr = this.rewardAddr;
+      h.merkleRoot = this.getMerkleRoot();
+      h.merkleMutated = !!this.merkleMutated;
+    }
+    return h;
+  }
+
+  /**
    * Returns true if the hash of the block is less than the target
    * proof of work value.
    *
    * @returns {Boolean} - True if the block has a valid proof.
    */
   hasValidProof() {
-    let h = utils.hash(this.serialize());
+    // PoW commits to the block header, not the raw transaction list.
+    let h = utils.hash(JSON.stringify(this.getHeader()));
     let n = BigInt(`0x${h}`);
     return n < this.target;
   }
@@ -184,9 +209,11 @@ module.exports = class Block {
     } else {
       // Other blocks must specify transactions and proof details.
       o.transactions = Array.from(this.transactions.entries());
+      o.header = this.getHeader();
       o.prevBlockHash = this.prevBlockHash;
       o.proof = this.proof;
       o.rewardAddr = this.rewardAddr;
+      // Peers recompute from transactions + compare (do not trust proposer blindly).
       o.merkleRoot = this.getMerkleRoot();
       o.merkleMutated = !!this.merkleMutated;
     }
@@ -222,6 +249,13 @@ module.exports = class Block {
    * @returns {Boolean} - True if the transaction was added successfully.
    */
   addTransaction(tx, client) {
+    // Finite block space (matches miner heap pull cap).
+    const maxTx = Blockchain.MAX_BLOCK_TRANSACTIONS;
+    if (this.transactions.size >= maxTx) {
+      if (client) client.log(`Block full (${maxTx} transactions max).`);
+      return false;
+    }
+
     if (this.transactions.get(tx.id)) {
       if (client) client.log(`Duplicate transaction ${tx.id}.`);
       return false;
@@ -280,6 +314,11 @@ module.exports = class Block {
    * @returns {Boolean} - True if the block's transactions are all valid.
    */
   rerun(prevBlock) {
+    // Same tx id twice in serialized JSON is ambiguous with Merkle padding (see proposal / CHANGELOG).
+    if (this.invalidDuplicateWireTxIds) {
+      return false;
+    }
+
     // Setting balances to the previous block's balances.
     this.balances = new Map(prevBlock.balances);
     this.nextNonce = new Map(prevBlock.nextNonce);
@@ -296,8 +335,7 @@ module.exports = class Block {
       if (!success) return false;
     }
 
-    // Verify claimed merkle root and mutation rule, if present.
-    // If missing (older blocks), compute and set it.
+    // Independent Merkle check: claimed fields must match our recomputation; reject mutated trees.
     const claimedRoot = this.merkleRoot;
     const claimedMutated = !!this.merkleMutated;
     const { root, mutated } = this._recomputeMerkle();

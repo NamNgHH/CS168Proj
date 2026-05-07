@@ -22,6 +22,9 @@ const DEFAULT_TX_FEE = 1;
 // Note that the genesis block is always considered to be confirmed.
 const CONFIRMED_DEPTH = 6;
 
+/** Must stay in sync with miner mempool pull loop (fee-priority top-N into next block). */
+const MAX_BLOCK_TRANSACTIONS = 8;
+
 
 /**
  * The Blockchain class tracks configuration information and settings for the
@@ -57,7 +60,10 @@ module.exports = class Blockchain {
     let bc = Blockchain.getInstance();
     return bc.confirmedDepth;
   }
-  
+
+  static get MAX_BLOCK_TRANSACTIONS() {
+    return MAX_BLOCK_TRANSACTIONS;
+  }
 
   /**
    * Produces a new genesis block, giving the specified clients the amount of
@@ -112,10 +118,18 @@ module.exports = class Blockchain {
       b.merkleMutated = o.merkleMutated;
       // Likewise, transactions need to be recreated and restored in a map.
       b.transactions = new Map();
-      if (o.transactions) o.transactions.forEach(([txID,txJson]) => {
-        let tx = this.makeTransaction(txJson);
-        b.transactions.set(txID, tx);
-      });
+      // Map loses duplicate keys; detect repeats in the wire array so rerun can reject.
+      if (o.transactions) {
+        const seenWireIds = new Set();
+        o.transactions.forEach(([txID, txJson]) => {
+          if (seenWireIds.has(txID)) {
+            b.invalidDuplicateWireTxIds = true;
+          }
+          seenWireIds.add(txID);
+          let tx = this.makeTransaction(txJson);
+          b.transactions.set(txID, tx);
+        });
+      }
     }
 
     return b;

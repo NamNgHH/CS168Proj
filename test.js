@@ -91,6 +91,31 @@ describe('Block', () => {
       b2.addTransaction(tx);
       assert.isEmpty(b2.transactions);
     });
+
+    // Merkle / miner extension: finite block matches Blockchain.MAX_BLOCK_TRANSACTIONS.
+    it(`should reject txs beyond MAX_BLOCK_TRANSACTIONS (${Blockchain.MAX_BLOCK_TRANSACTIONS})`, () => {
+      let b = new Block(addr, prevBlock);
+      for (let n = 0; n < Blockchain.MAX_BLOCK_TRANSACTIONS; n++) {
+        let tx = new Transaction({
+          from: addr,
+          pubKey: kp.public,
+          outputs: [{ amount: 1, address: 'face' }],
+          fee: 1,
+          nonce: n,
+        });
+        tx.sign(kp.private);
+        assert.isTrue(b.addTransaction(tx), `expected tx ${n} to be accepted`);
+      }
+      let overflow = new Transaction({
+        from: addr,
+        pubKey: kp.public,
+        outputs: [{ amount: 1, address: 'face' }],
+        fee: 1,
+        nonce: Blockchain.MAX_BLOCK_TRANSACTIONS,
+      });
+      overflow.sign(kp.private);
+      assert.isFalse(b.addTransaction(overflow));
+    });
   });
 
   describe('#rerun', () => {
@@ -137,6 +162,20 @@ describe('Block', () => {
       assert.equal(b2.balances.get("ffff"), 100+20);
       assert.equal(b2.balances.get("face"), 99+40);
     });
+
+    // Extension: duplicate tx IDs on wire must invalidate block (Map would silently collapse dup keys).
+    it('should reject blocks whose serialized tx list repeats the same tx id', () => {
+      let b = new Block(addr, prevBlock);
+      let tx = new Transaction(t);
+      tx.sign(kp.private);
+      b.addTransaction(tx);
+
+      let o = JSON.parse(b.serialize());
+      o.transactions = [...o.transactions, o.transactions[0]];
+      let bad = Blockchain.deserializeBlock(o);
+      assert.isTrue(bad.invalidDuplicateWireTxIds);
+      assert.isFalse(bad.rerun(prevBlock));
+    });
   });
 
   describe('#getMerkleProof', () => {
@@ -152,6 +191,24 @@ describe('Block', () => {
       assert.equal(proof.root, b.getMerkleRoot());
     });
   });
+
+  describe('#getHeader', () => {
+    it("should expose merkle commitment fields in block header", () => {
+      let b = new Block(addr, prevBlock);
+      let tx = new Transaction(t);
+      tx.sign(kp.private);
+      b.addTransaction(tx);
+      b.proof = 1234;
+
+      let header = b.getHeader();
+      assert.equal(header.prevBlockHash, b.prevBlockHash);
+      assert.equal(header.proof, 1234);
+      assert.equal(header.rewardAddr, b.rewardAddr);
+      assert.equal(header.merkleRoot, b.getMerkleRoot());
+      assert.equal(header.merkleMutated, false);
+      assert.notProperty(header, "transactions");
+    });
+  });
 });
 
 describe('Merkle mutation rule', () => {
@@ -161,6 +218,29 @@ describe('Merkle mutation rule', () => {
     const b = merkle.leafHashFromTxId("b");
     const { mutated } = merkle.buildRoot([a, b, b]);
     assert.isTrue(mutated);
+  });
+});
+
+/**
+ * Bitcoin-style odd-padding duplicates the last leaf hash.
+ * A 3-tx tree becomes [h1,h2,h3,h3]; a 4-tx list that literally ends with two identical
+ * leaf hashes is the same bottom layer — same Merkle root, different tx counts / semantics.
+ * Real networks reject duplicate tx ids (and mutation flags) so two valid competing blocks
+ * cannot exploit this ambiguity.
+ */
+describe('Merkle ambiguous roots (CVE-2012-2459 class intuition)', () => {
+  it('two different leaf lists can produce the same Merkle root', () => {
+    const h1 = merkle.leafHashFromTxId('tx-A');
+    const h2 = merkle.leafHashFromTxId('tx-B');
+    const h3 = merkle.leafHashFromTxId('tx-C');
+
+    const threeLeaves = merkle.buildRoot([h1, h2, h3]);
+    const fourLeavesDupTail = merkle.buildRoot([h1, h2, h3, h3]);
+
+    assert.isFalse(threeLeaves.mutated);
+    assert.isFalse(fourLeavesDupTail.mutated);
+    assert.equal(threeLeaves.root, fourLeavesDupTail.root);
+    assert.notDeepEqual([h1, h2, h3], [h1, h2, h3, h3]);
   });
 });
 

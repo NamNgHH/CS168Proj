@@ -1,6 +1,8 @@
 "use strict";
 
 /**
+ * Miner mempool priority queue (max fee wins).
+ *
  * A simple binary max-heap.
  * - O(log n) insert
  * - O(log n) removeMax

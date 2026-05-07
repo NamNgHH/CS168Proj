@@ -2,6 +2,7 @@
 
 let Blockchain = require('./blockchain.js');
 let Client = require('./client.js');
+// Fee-priority mempool: O(log n) insert/remove; block txs still live only on Block.
 let MaxHeap = require('./max-heap.js');
 
 /**
@@ -29,8 +30,8 @@ module.exports = class Miner extends Client {
     super({name, password, net, startingBlock, keyPair});
     this.miningRounds=miningRounds;
 
-    // Fee-prioritized mempool (max-heap).
-    // Tie-breaker: tx id lexicographically for determinism.
+    // Replaces the old Set mempool: highest fee first when filling the next block.
+    // Equal fees → lexicographic tx.id so peers agree on block content ordering.
     this.mempool = new MaxHeap({
       compareFn: (a, b) => {
         const af = Number(a.fee) || 0;
@@ -65,13 +66,12 @@ module.exports = class Miner extends Client {
   startNewSearch(txSet=new Set()) {
     this.currentBlock = Blockchain.makeBlock(this.address, this.lastBlock);
 
-    // Re-queue txs we still know about.
     txSet.forEach((tx) => this._maybeAddToMempool(tx));
 
-    // Select top transactions by fee (max 8) into the new block.
+    // Greedy: pop best fee until block full or mempool empty (invalid txs go back to mempool).
     let added = 0;
     const leftovers = [];
-    while (added < 8 && this.mempool.size() > 0) {
+    while (added < Blockchain.MAX_BLOCK_TRANSACTIONS && this.mempool.size() > 0) {
       const tx = this.mempool.removeMax();
       this.mempoolIds.delete(tx.id);
       const ok = this.currentBlock.addTransaction(tx, this);
@@ -205,6 +205,7 @@ module.exports = class Miner extends Client {
     return this.addTransaction(tx);
   }
 
+  /** Heap dedupe by tx.id; cheap admission checks vs chain head only. */
   _maybeAddToMempool(tx) {
     if (!tx || !tx.id) return false;
     if (this.mempoolIds.has(tx.id)) return false;

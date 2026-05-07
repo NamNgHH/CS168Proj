@@ -1,5 +1,10 @@
 "use strict";
 
+/**
+ * Merkle commitments for SpartanGold blocks (see CHANGELOG.md).
+ * Internal pairing uses double-SHA256 on concatenated 32-byte child hashes (hex in/out).
+ */
+
 const crypto = require("crypto");
 
 function sha256(buf) {
@@ -57,8 +62,7 @@ exports.buildRoot = function buildRoot(leafHashes) {
     const next = [];
     const isOdd = (level.length % 2) === 1;
     if (isOdd) {
-      // If the last two hashes are identical and we're going to duplicate,
-      // that indicates the Bitcoin "duplicate-tail" mutation.
+      // Bitcoin Core-style mutation signal: odd count + duplicate tail before balancing dup.
       if (level.length >= 2 && level[level.length - 1] === level[level.length - 2]) {
         mutated = true;
       }
