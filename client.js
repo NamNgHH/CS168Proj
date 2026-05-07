@@ -225,7 +225,7 @@ module.exports = class Client extends EventEmitter {
 
     if (!block.isGenesisBlock()) {
       //make sure the block has the real merkle proof that reflects the transactions
-      const txIds = [...this.currentBlock.transactions.values()].map(tx => tx.id);
+      const txIds = [...block.transactions.values()].map(tx => tx.id);
       const merkleTree = new MerkleTree(txIds);
       if (block.merkleRoot !== merkleTree.root) {
         this.log(`Invalid Merkle root for block ${block.id}.`);

@@ -12,7 +12,7 @@ console.log("Starting simulation.  This may take a moment...");
 // Creating genesis block
 let bc = Blockchain.createInstance({
   clients: [
-    {name: 'Alice', amount: 500},
+    {name: 'Alice', amount: 800},
     {name: 'Bob', amount: 0},
     {name: 'Minnie', amount: 400, mining: true},
     {name: 'Mickey', amount: 300, mining: true},
@@ -35,10 +35,26 @@ bc.start(8000, () => {
   alice.showAllBalances();
 });
 
-// Alice transfers some money to Bob.
-console.log(`Alice is transferring 40 gold to ${bob.address}`);
-alice.postTransaction([{ amount: 40, address: bob.address }]);
+console.log(`Alice is transferring 10 gold to ${bob.address}`);
+alice.postTransaction([{ amount: 10, address: bob.address }], 1);
 
-setTimeout(() => {
-}, 2000);
+console.log(`Alice is transferring 10 gold to ${bob.address}`);
+alice.postTransaction([{ amount: 10, address: bob.address }], 2);
 
+console.log(`Alice is transferring 10 gold to ${bob.address}`);
+alice.postTransaction([{ amount: 10, address: bob.address }], 3);
+
+console.log(`Alice is transferring 10 gold to ${bob.address}`);
+alice.postTransaction([{ amount: 10, address: bob.address }], 4);
+
+console.log(`Alice is transferring 10 gold to ${bob.address}`);
+alice.postTransaction([{ amount: 10, address: bob.address }], 5);
+
+console.log(`Alice is transferring 10 gold to ${bob.address}`);
+alice.postTransaction([{ amount: 10, address: bob.address }], 6);
+
+console.log(`Alice is transferring 10 gold to ${bob.address}`);
+alice.postTransaction([{ amount: 10, address: bob.address }], 7);
+
+console.log(`Alice is transferring 10 gold to ${bob.address}`);
+alice.postTransaction([{ amount: 10, address: bob.address }], 8);

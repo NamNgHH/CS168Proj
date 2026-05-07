@@ -21,7 +21,7 @@ const DEFAULT_TX_FEE = 1;
 // confirmed, for no better reason than that is what Bitcoin does.
 // Note that the genesis block is always considered to be confirmed.
 const CONFIRMED_DEPTH = 6;
-const MAX_BLOCK_TRANSACTIONS = 8;
+const MAX_BLOCK_TRANSACTIONS = 4;
 
 
 /**
@@ -109,6 +109,7 @@ module.exports = class Blockchain {
       b.prevBlockHash = o.prevBlockHash;
       b.proof = o.proof;
       b.rewardAddr = o.rewardAddr;
+      b.merkleRoot = o.merkleRoot;
       // Likewise, transactions need to be recreated and restored in a map.
       b.transactions = new Map();
       if (o.transactions) o.transactions.forEach(([txID,txJson]) => {
