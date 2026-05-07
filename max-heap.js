@@ -6,6 +6,10 @@ module.exports = class MaxHeap {
     this.compare = compareFn;
   }
 
+  has(x) {
+    return this.heap.includes(x);
+  }
+
   size() {
     return this.heap.length;
   }

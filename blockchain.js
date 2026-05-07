@@ -58,6 +58,10 @@ module.exports = class Blockchain {
     let bc = Blockchain.getInstance();
     return bc.confirmedDepth;
   }
+
+  static get MAX_BLOCK_TRANSACTIONS() {
+    return MAX_BLOCK_TRANSACTIONS;
+  }
   
 
   /**
