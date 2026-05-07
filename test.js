@@ -205,11 +205,8 @@ describe('Merkle mutation rule', () => {
 });
 
 /**
- * Bitcoin-style odd-padding duplicates the last leaf hash.
- * A 3-tx tree becomes [h1,h2,h3,h3]; a 4-tx list that literally ends with two identical
- * leaf hashes is the same bottom layer — same Merkle root, different tx counts / semantics.
- * Real networks reject duplicate tx ids (and mutation flags) so two valid competing blocks
- * cannot exploit this ambiguity.
+ * A 3-tx tree becomes [h1,h2,h3,h3]; a 4-tx list that ends with two identical
+ * leaf hashes is the same bottom layer. Same Merkle root, different tx counts
  */
 describe('Merkle ambiguous roots (CVE-2012-2459 class intuition)', () => {
   it('two different leaf lists can produce the same Merkle root', () => {
